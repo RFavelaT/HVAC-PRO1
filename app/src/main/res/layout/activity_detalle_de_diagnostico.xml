@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+
+    android:layout_margin="20dp"
+
+    tools:context=".DetalleDeDiagnostico">
+
+    <LinearLayout
+
+        android:layout_width="wrap_content"
+
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/textView8"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="20dp"
+            android:text="@string/textView_titulo_detalle_diagnostico"
+            android:textSize="24sp" />
+
+        <TextView
+            android:id="@+id/textView_detalle_diagnostico_descripcion"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginTop="20dp"
+            android:text="@string/textView_detalle_diagnostico"
+            android:textSize="18sp" />
+
+        <ImageView
+            android:id="@+id/imageView_detalle_diagnostico"
+            android:layout_width="252dp"
+            android:layout_height="122dp"
+            android:layout_gravity="center"
+            android:layout_marginTop="30dp"
+            android:layout_marginBottom="30dp"
+            android:contentDescription="@string/imageView_detalle_diagnostico"
+            app:srcCompat="@drawable/falta_refrigerante" />
+
+        <Button
+            android:id="@+id/button_detalle_diagnostico_volver"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginBottom="30dp"
+            android:text="@string/button_volver_captura_datos"
+            android:textSize="24sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_guardar_diagnostico"
+                android:layout_width="150dp"
+                android:layout_height="wrap_content"
+                android:layout_marginRight="20dp"
+                android:text="@string/button_guardar_diagnostico" />
+
+            <Button
+                android:id="@+id/button_ver_diagnosticos"
+                android:layout_width="150dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/button_ver_diagnosticos" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

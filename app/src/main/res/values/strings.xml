@@ -1,0 +1,77 @@
+<resources>
+    <string name="app_name">HVAC-PRO</string>
+    <string name="textView_titulo">DIAGNÓSTICO MINISPLIT</string>
+    <string name="imageView_equipo_refrigeracion">IMÁGEN DE UN EQUIPO DE REFRIGERACIÓN</string>
+    <string name="textView_introduccion">Aplicación diseñada para el diagnóstico de fallas en sistemas de A/C tipo minisplit.</string>
+    <string name="button_iniciar">DIAGNÓSTICO SIMPLE</string>
+    <string name="buton_valores_optimos">VALORES ÓPTIMOS</string>
+    <string name="button_fuzzy">Diagnóstico Fuzzy</string>
+
+    <!--Recursos string para actividad captura_datos-->
+
+    <string name="textView_titulo_captura_datos">Captura de valores</string>
+    <string name="textView_tipo_refrigerante">Selecciona el refrigerante que usa el equipo</string>
+    <string name="radiobutton_refrigerante_R22">R22</string>
+    <string name="radiobutton_refrigerante_R410">R410a</string>
+    <string name="radiobutton_refrigerante_R32">R32</string>
+    <string name="radiobutton_refrigerante_Otro">Otro</string>
+
+
+    <string name="textView_tipo_consumo">Selecciona si el equipo es de consumo inverter o convencional (on/off)</string>
+    <string name="radiobutton_consumo_inverter">Inverter</string>
+    <string name="radiobutton_consumo_convencional">Convencional</string>
+
+    <string name="textView_presion_lado_baja">Registra la presión de refrigerante en el lado de BAJA presión (PSI)</string>
+    <string name="editText_presion_lado_baja">PSI</string>
+
+    <string name="textView_temperatura_lado_baja">Registra la temperatura de refrigerante en el lado de BAJA presión (ºC)</string>
+    <string name="editText_temperatura_lado_baja">Temperatura en grados centígrados</string>
+
+    <string name="textView_temperatura_lado_alta">Registra la temperatura de refrigerante en el lado de ALTA presión (ºC)</string>
+    <string name="editText_temperatura_lado_alta">Temperatura en grados centígrados</string>
+
+
+    <string name="button_Diagnosticar">Diagnosticar</string>
+
+    <string name="textView_diagnostico">Diagnóstico</string>
+
+    <string name="button_detalle_diagnostico">Detalle del diagnóstico</string>
+
+
+    <!-- Recursos string para actividad detalle_de_diagnostico -->
+
+    <string name="textView_titulo_detalle_diagnostico">DETALLE DEL DIAGNÓSTICO</string>
+    <string name="textView_detalle_diagnostico">DETALLE DEL DIAGNÓSTICO</string>
+    <string name="imageView_detalle_diagnostico">IMÁGEN DEL DETALLE DEL DIAGNÓSTICO</string>
+    <string name="button_volver_captura_datos">Volver a la captura</string>
+    <string name="button_guardar_diagnostico">Guardar diagnóstico</string>
+    <string name="button_ver_diagnosticos">Ver diagnósticos</string>
+
+
+    <string-array name="opciones_array">
+        <item>Selecciona el Refrigerante</item>
+        <item>R32</item>
+        <item>R22</item>
+        <item>R410a</item>
+        <item>Otro</item>
+    </string-array>
+
+
+    <!-- Recursos string para actividad valores_optimos -->
+
+    <string name="textView_titulo_valores_optimos">DIAGNÓSTICO DE CARGA DE REFRIGERANTE</string>
+    <string name="imageView_reglas_carga">REGLA PARA EL DIAGNÓSTICO DE CARGA DE REFRIGERANTE</string>
+    <string name="imageView_rangos_optimos_R410a">RANGOS ÓPTIMOS PARA REFRIGERANTE R410a</string>
+    <string name="imageView_rangos_optimos_R22">RANGOS ÓPTIMOS PARA REFRIGERANTE R22</string>
+    <string name="imageView_rangos_optimos_R32">RANGOS ÓPTIMOS PARA REFRIGERANTE R32</string>
+    <string name="button_volver_inicio">INICIO</string>
+
+
+    <!-- Recursos string para actividad historial_de_diagnostico -->
+
+    <string name="textView_titulo_historial_de_diagnostico">HISTORIAL DE DIAGNÓSTICOS</string>
+    <string name="button_historial_volver">Volver</string>
+    <string name="button_eliminar_historial">Eliminar Historial</string>
+
+
+</resources>

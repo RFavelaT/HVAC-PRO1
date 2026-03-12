@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/scrollRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:padding="16dp"
+    tools:context=".DiagnosticoFuzzyLogic2">
+
+    <LinearLayout
+        android:id="@+id/root"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Título -->
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Diagnóstico Minisplit (sin alta presión)"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:paddingBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ingresa mediciones y selecciona síntomas (No / Medio / Sí)"
+            android:textSize="14sp"
+            android:paddingBottom="12dp" />
+
+        <!-- ========================= -->
+        <!-- Card: Mediciones -->
+        <!-- ========================= -->
+        <LinearLayout
+            android:id="@+id/cardMeas"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:background="@android:drawable/dialog_holo_light_frame">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Mediciones"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:paddingBottom="10dp" />
+
+            <!-- ============ NUEVO: Ciudad / Altitud ============ -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Ciudad (para corrección por altitud):" />
+
+            <!-- Spinner de ciudad (ListBox en Android) -->
+            <Spinner
+                android:id="@+id/spCity"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:spinnerMode="dropdown"
+                android:padding="8dp" />
+
+            <!-- Muestra altitud calculada/seleccionada -->
+            <TextView
+                android:id="@+id/tvAltitudeValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Altitud: 0 msnm"
+                android:textStyle="bold"
+                android:paddingTop="6dp"
+                android:paddingBottom="12dp" />
+            <!-- ============ FIN NUEVO: Ciudad / Altitud ============ -->
+
+            <!-- Refrigerante -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Refrigerante:" />
+
+            <Spinner
+                android:id="@+id/spRefrigerant"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:spinnerMode="dropdown"
+                android:padding="8dp" />
+
+            <!-- Presión succión -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Presión de succión (PSI):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbSuctionPsi"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="160" />
+
+                <TextView
+                    android:id="@+id/tvSuctionPsiValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="115"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- Temp línea succión -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Temp. de línea de succión (°C):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbSuctionLineTemp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="450" />
+
+                <TextView
+                    android:id="@+id/tvSuctionLineTempValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="22.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- ΔT aire interior -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ΔT de aire interior (Evaporador):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbDeltaTAir"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="200" />
+
+                <TextView
+                    android:id="@+id/tvDeltaTAirValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="10.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- Amperaje compresor -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Amperaje compresor medido (A):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbCompAmps"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="300" />
+
+                <TextView
+                    android:id="@+id/tvCompAmpsValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="8.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- RLA -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="RLA compresor (placa) (A):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbRla"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="290" />
+
+                <TextView
+                    android:id="@+id/tvRlaValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="10.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- Temp Evaporador -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Temp. Evaporador (°C):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbTevap"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="500" />
+
+                <TextView
+                    android:id="@+id/tvTevapValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="6.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- Temp Condensador -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Temp. Condensador (°C):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbTcond"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="600" />
+
+                <TextView
+                    android:id="@+id/tvTcondValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="45.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+            <!-- Temp ambiente exterior -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Temp. ambiente exterior (°C):"
+                android:paddingTop="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <SeekBar
+                    android:id="@+id/sbTambExt"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="550" />
+
+                <TextView
+                    android:id="@+id/tvTambExtValue"
+                    android:layout_width="72dp"
+                    android:layout_height="wrap_content"
+                    android:text="35.0"
+                    android:textAlignment="viewEnd"
+                    android:textStyle="bold"
+                    android:paddingStart="12dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Spacer -->
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- ========================= -->
+        <!-- Card: Síntomas -->
+        <!-- ========================= -->
+        <LinearLayout
+            android:id="@+id/cardSymptoms"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:background="@android:drawable/dialog_holo_light_frame">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Síntomas / observaciones"
+                android:textStyle="bold"
+                android:textSize="16sp"
+                android:paddingBottom="10dp" />
+
+            <!-- Cada fila: Label + Spinner -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Enfría poco (queja):" />
+
+                <Spinner
+                    android:id="@+id/spLowCooling"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Hielo en evaporador:" />
+
+                <Spinner
+                    android:id="@+id/spIceEvap"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Flujo aire interior bajo:" />
+
+                <Spinner
+                    android:id="@+id/spLowAirflow"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Condensador exterior sucio:" />
+
+                <Spinner
+                    android:id="@+id/spDirtyCond"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <!-- NUEVO: Ventilador condensador OK -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Ventilador de condensador funciona correctamente:" />
+
+                <Spinner
+                    android:id="@+id/spCondFanOk"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <!-- NUEVO: Turbina evaporador OK -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Turbina de evaporador funciona correctamente:" />
+
+                <Spinner
+                    android:id="@+id/spEvapFanOk"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="10dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Compresor muy caliente:" />
+
+                <Spinner
+                    android:id="@+id/spCompHot"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingBottom="4dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Escarcha localizada (restr.):" />
+
+                <Spinner
+                    android:id="@+id/spFrostRestr"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Spacer -->
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="14dp" />
+
+        <!-- Botón Diagnosticar -->
+        <Button
+            android:id="@+id/btnDiagnose"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Diagnosticar" />
+
+        <!-- Resultados -->
+        <TextView
+            android:id="@+id/tvResults"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="12dp"
+            android:text="Resultados..."
+            android:textSize="14sp"
+            android:typeface="monospace"
+            android:padding="12dp"
+            android:background="@android:drawable/editbox_background" />
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="18dp" />
+
+    </LinearLayout>
+</ScrollView>
