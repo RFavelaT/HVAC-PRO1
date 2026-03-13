@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-HVAC Fuzzy Diagnostic (sin alta, sin subenfriamiento) - v4 (con altitud + fans OK)
-Chaquopy-ready (Android):
-- NO usa ipywidgets / Jupyter
-- Lee entradas desde ClaseDatosPythonJava (Java static fields)
-- Escribe resultados de vuelta a ClaseDatosPythonJava:
-    diagnostico (str), nivel_carga (int), tsat_evap_c (float), sh_c (float)
+HVAC Fuzzy Diagnostic (sin alta, sin subenfriamiento) - v7
+(con altitud + fans OK + vacío en baja hasta -10 psi
+ + top diagnóstico sin 0%
+ + scores completos
+ + FIX: conserva síntomas en 0 correctamente
+ + mensaje de equipo sano)
 """
 
 import numpy as np
@@ -14,7 +14,6 @@ from skfuzzy import control as ctrl
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Tuple, Optional
 
-# Chaquopy Java bridge
 from java import jclass
 
 
@@ -79,47 +78,33 @@ def tsat_from_suction_psig(refrigerant: str, psig: float) -> Tuple[Optional[floa
 
 
 # ============================================================
-# Altitud -> presión atmosférica (psia) (atm estándar aprox)
+# Altitud -> presión atmosférica (psia)
 # ============================================================
 def patm_psia_from_alt_m(alt_m: float) -> float:
-    """
-    Aproximación atmósfera estándar (troposfera) hasta ~11km.
-    Devuelve presión atmosférica en psia.
-    """
     alt_m = max(0.0, float(alt_m))
-    # Constantes ISA
-    P0 = 101325.0     # Pa
-    T0 = 288.15       # K
-    L = 0.0065        # K/m
-    g = 9.80665       # m/s^2
-    R = 287.05287     # J/(kg·K)
+    P0 = 101325.0
+    T0 = 288.15
+    L = 0.0065
+    g = 9.80665
+    R = 287.05287
 
-    # P = P0*(1 - L*h/T0)^(g/(R*L))
     x = 1.0 - (L * alt_m) / T0
     x = max(1e-6, x)
-    P = P0 * (x ** (g / (R * L)))  # Pa
+    P = P0 * (x ** (g / (R * L)))
 
-    # Pa -> psi
     psi = P * 0.0001450377377
     return float(psi)
 
 
 def psig_local_to_sea_level_equiv(psig_local: float, alt_m: float) -> Tuple[float, List[str]]:
-    """
-    Convierte psig medido a una psig equivalente a nivel del mar para usar tablas,
-    manteniendo el MISMO psia del sistema.
-      psia_local = psig_local + patm_local
-      psig_equiv = psia_local - patm_sea
-    """
     warnings: List[str] = []
     psig_local = float(psig_local)
     patm_local = patm_psia_from_alt_m(alt_m)
-    patm_sea = 14.6959  # psia
+    patm_sea = 14.6959
 
     psia = psig_local + patm_local
     psig_equiv = psia - patm_sea
 
-    # Si altitud es alta, psig_equiv será un poco menor que psig_local (esperado)
     if alt_m > 500:
         warnings.append(
             f"Ajuste por altitud: patm_local≈{patm_local:.2f} psia (alt {alt_m:.0f} m). "
@@ -129,18 +114,24 @@ def psig_local_to_sea_level_equiv(psig_local: float, alt_m: float) -> Tuple[floa
     return float(psig_equiv), warnings
 
 
+def java_num(obj, attr_name: str, default: float = 0.0) -> float:
+    val = getattr(obj, attr_name, None)
+    if val is None:
+        return float(default)
+    return float(val)
+
+
 # ============================================================
-# Modelo difuso (usa %RLA, Tevap IR, ΔTcond_ext + síntomas)
+# Modelo difuso
 # ============================================================
 def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
-    SH = ctrl.Antecedent(np.arange(0, 31, 1), 'SH')                 # °C
-    SUC = ctrl.Antecedent(np.arange(20, 181, 1), 'SUC')             # psig (equiv nivel mar si aplica)
-    dT_air = ctrl.Antecedent(np.arange(0, 21, 1), 'dT_air')         # °C
-    pctRLA = ctrl.Antecedent(np.arange(0, 161, 1), 'pctRLA')        # %
-    Tevap = ctrl.Antecedent(np.arange(-20, 31, 1), 'Tevap')         # °C
-    dTcond_ext = ctrl.Antecedent(np.arange(0, 51, 1), 'dTcond_ext') # °C
+    SH = ctrl.Antecedent(np.arange(0, 31, 1), 'SH')
+    SUC = ctrl.Antecedent(np.arange(-10, 181, 1), 'SUC')
+    dT_air = ctrl.Antecedent(np.arange(0, 21, 1), 'dT_air')
+    pctRLA = ctrl.Antecedent(np.arange(0, 161, 1), 'pctRLA')
+    Tevap = ctrl.Antecedent(np.arange(-20, 31, 1), 'Tevap')
+    dTcond_ext = ctrl.Antecedent(np.arange(0, 51, 1), 'dTcond_ext')
 
-    # síntomas (0..100)
     low_cooling = ctrl.Antecedent(np.arange(0, 101, 1), 'low_cooling')
     ice = ctrl.Antecedent(np.arange(0, 101, 1), 'ice')
     dirty_cond = ctrl.Antecedent(np.arange(0, 101, 1), 'dirty_cond')
@@ -148,31 +139,25 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
     comp_hot = ctrl.Antecedent(np.arange(0, 101, 1), 'comp_hot')
     frost_restriction = ctrl.Antecedent(np.arange(0, 101, 1), 'frost_restriction')
 
-    # NUEVOS síntomas: "OK" (0/50/100) -> no/maybe/yes
     fan_cond_ok = ctrl.Antecedent(np.arange(0, 101, 1), 'fan_cond_ok')
     fan_evap_ok = ctrl.Antecedent(np.arange(0, 101, 1), 'fan_evap_ok')
 
-    # salidas
     low_charge = ctrl.Consequent(np.arange(0, 101, 1), 'low_charge')
     overcharge = ctrl.Consequent(np.arange(0, 101, 1), 'overcharge')
     restriction = ctrl.Consequent(np.arange(0, 101, 1), 'restriction')
     airflow_issue = ctrl.Consequent(np.arange(0, 101, 1), 'airflow_issue')
-
-    # existente: condensador sucio / mala disipación
     cond_fouled = ctrl.Consequent(np.arange(0, 101, 1), 'cond_fouled')
-
-    # NUEVO: ventilación exterior deficiente (ventilador/obstrucción/recirculación)
     cond_fan_issue = ctrl.Consequent(np.arange(0, 101, 1), 'cond_fan_issue')
 
-    # ================= Memberships =================
     SH['low'] = fuzz.trapmf(SH.universe, [0, 0, 4, 8])
     SH['normal'] = fuzz.trimf(SH.universe, [6, 10, 14])
     SH['high'] = fuzz.trapmf(SH.universe, [12, 15, 30, 30])
 
-    SUC['very_low'] = fuzz.trapmf(SUC.universe, [20, 20, 40, 60])
-    SUC['low'] = fuzz.trapmf(SUC.universe, [50, 65, 85, 105])
-    SUC['normal'] = fuzz.trimf(SUC.universe, [90, 115, 140])
-    SUC['high'] = fuzz.trapmf(SUC.universe, [130, 150, 180, 180])
+    SUC['vacuum']   = fuzz.trapmf(SUC.universe, [-10, -10, 0, 8])
+    SUC['very_low'] = fuzz.trapmf(SUC.universe, [5, 10, 25, 40])
+    SUC['low']      = fuzz.trapmf(SUC.universe, [30, 45, 70, 95])
+    SUC['normal']   = fuzz.trimf(SUC.universe, [85, 110, 140])
+    SUC['high']     = fuzz.trapmf(SUC.universe, [130, 150, 180, 180])
 
     dT_air['low'] = fuzz.trapmf(dT_air.universe, [0, 0, 4, 7])
     dT_air['normal'] = fuzz.trimf(dT_air.universe, [6, 10, 14])
@@ -187,19 +172,15 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
     Tevap['cold']      = fuzz.trimf(Tevap.universe, [-2, 6, 12])
     Tevap['warm']      = fuzz.trapmf(Tevap.universe, [10, 16, 30, 30])
 
-    # Ajuste leve recomendado para evitar que "mala disipación" se dispare tan pronto:
     dTcond_ext['low']    = fuzz.trapmf(dTcond_ext.universe, [0, 0, 8, 12])
     dTcond_ext['normal'] = fuzz.trimf(dTcond_ext.universe, [10, 18, 26])
     dTcond_ext['high']   = fuzz.trapmf(dTcond_ext.universe, [24, 30, 50, 50])
 
-    # Síntomas (presentes: no/maybe/yes)
     for s in [low_cooling, ice, dirty_cond, low_airflow, comp_hot, frost_restriction]:
         s['no'] = fuzz.trapmf(s.universe, [0, 0, 20, 45])
         s['maybe'] = fuzz.trimf(s.universe, [30, 50, 70])
         s['yes'] = fuzz.trapmf(s.universe, [60, 80, 100, 100])
 
-    # "OK" (fan) -> no/maybe/yes
-    # 0 => NO funciona, 50 => medio, 100 => Sí funciona
     for s in [fan_cond_ok, fan_evap_ok]:
         s['no'] = fuzz.trapmf(s.universe, [0, 0, 20, 45])
         s['maybe'] = fuzz.trimf(s.universe, [30, 50, 70])
@@ -210,10 +191,8 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
         out['med'] = fuzz.trimf(out.universe, [30, 50, 70])
         out['high'] = fuzz.trapmf(out.universe, [60, 80, 100, 100])
 
-    # ================= Rules =================
     rules = []
 
-    # Baja carga
     rules += [
         ctrl.Rule(low_cooling['yes'] & SUC['low'] & SH['high'], low_charge['high']),
         ctrl.Rule(low_cooling['yes'] & SUC['very_low'] & SH['high'], low_charge['high']),
@@ -223,29 +202,31 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
         ctrl.Rule(dTcond_ext['normal'] & SH['high'] & SUC['low'], low_charge['med']),
     ]
 
-    # Restricción
     rules += [
         ctrl.Rule(frost_restriction['yes'] & SH['high'] & SUC['very_low'], restriction['high']),
         ctrl.Rule(SH['high'] & SUC['very_low'], restriction['med']),
-        ctrl.Rule(pctRLA['over'] & SH['high'] & SUC['very_low'], restriction['high']),
+        ctrl.Rule(Tevap['warm'] & SUC['very_low'] & SH['high'], restriction['med']),
         ctrl.Rule(Tevap['very_cold'] & SUC['very_low'] & SH['high'], restriction['med']),
+        ctrl.Rule(SUC['vacuum'] & SH['high'], restriction['high']),
+        ctrl.Rule(SUC['vacuum'] & frost_restriction['yes'], restriction['high']),
+        ctrl.Rule(SUC['vacuum'] & Tevap['warm'], restriction['high']),
+        ctrl.Rule(SUC['vacuum'] & fan_evap_ok['yes'] & fan_cond_ok['yes'], restriction['high']),
+        ctrl.Rule(SUC['very_low'] & SH['high'] & fan_evap_ok['yes'] & fan_cond_ok['yes'], restriction['high']),
+        ctrl.Rule(SUC['very_low'] & SH['high'] & pctRLA['low'], restriction['med']),
+        ctrl.Rule(SUC['very_low'] & SH['high'] & pctRLA['normal'], restriction['med']),
     ]
 
-    # Bajo flujo interior (ahora también con turbina)
     rules += [
         ctrl.Rule(low_airflow['yes'] & ice['yes'] & SH['low'], airflow_issue['high']),
         ctrl.Rule(low_airflow['yes'] & dT_air['low'], airflow_issue['high']),
         ctrl.Rule(ice['yes'] & SH['low'], airflow_issue['med']),
         ctrl.Rule(Tevap['very_cold'] & ice['yes'], airflow_issue['high']),
         ctrl.Rule(pctRLA['low'] & low_airflow['yes'], airflow_issue['med']),
-
-        # NUEVO: turbina evaporador NO OK -> airflow_issue
         ctrl.Rule(fan_evap_ok['no'] & (dT_air['low'] | ice['yes']), airflow_issue['high']),
         ctrl.Rule(fan_evap_ok['no'] & low_airflow['maybe'], airflow_issue['high']),
         ctrl.Rule(fan_evap_ok['maybe'] & (dT_air['low'] | low_airflow['yes']), airflow_issue['med']),
     ]
 
-    # Condensador sucio (más "literal": depende de dirty_cond)
     rules += [
         ctrl.Rule(dirty_cond['yes'] & low_cooling['yes'], cond_fouled['med']),
         ctrl.Rule(dirty_cond['yes'] & comp_hot['yes'], cond_fouled['med']),
@@ -254,7 +235,6 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
         ctrl.Rule(dTcond_ext['normal'] & dirty_cond['yes'], cond_fouled['med']),
     ]
 
-    # NUEVO: ventilación exterior deficiente (ventilador/obstrucción/recirculación)
     rules += [
         ctrl.Rule(fan_cond_ok['no'] & dTcond_ext['high'] & comp_hot['yes'], cond_fan_issue['high']),
         ctrl.Rule(fan_cond_ok['no'] & dTcond_ext['high'] & (pctRLA['high'] | pctRLA['over']), cond_fan_issue['high']),
@@ -262,15 +242,12 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
         ctrl.Rule(fan_cond_ok['no'] & low_cooling['yes'], cond_fan_issue['med']),
     ]
 
-    # Exceso de refrigerante (sobrecarga)
     rules += [
         ctrl.Rule(SH['low'] & SUC['high'] & (pctRLA['high'] | pctRLA['over']), overcharge['high']),
         ctrl.Rule(low_cooling['yes'] & SH['low'] & SUC['high'] & pctRLA['over'], overcharge['high']),
         ctrl.Rule(SH['low'] & (pctRLA['high'] | pctRLA['over']) & dTcond_ext['high'], overcharge['high']),
         ctrl.Rule(SH['low'] & dTcond_ext['high'] & comp_hot['yes'], overcharge['high']),
         ctrl.Rule(SH['low'] & dTcond_ext['high'], overcharge['med']),
-
-        # NUEVO: si ventilador OK y condensador NO sucio, pero señales de sobrecarga -> subir sobrecarga
         ctrl.Rule(SH['low'] & SUC['high'] & pctRLA['over'] & fan_cond_ok['yes'] & dirty_cond['no'], overcharge['high']),
         ctrl.Rule(SH['low'] & SUC['high'] & (pctRLA['high'] | pctRLA['over']) & fan_cond_ok['yes'] & dirty_cond['no'], overcharge['high']),
         ctrl.Rule(SH['low'] & dTcond_ext['high'] & fan_cond_ok['yes'] & dirty_cond['no'], overcharge['med']),
@@ -280,9 +257,6 @@ def build_fuzzy_hvac_model_no_high_side() -> ctrl.ControlSystemSimulation:
     return ctrl.ControlSystemSimulation(system)
 
 
-# ============================================================
-# Diagnóstico
-# ============================================================
 @dataclass
 class StepResult:
     tsat_evap: Optional[float]
@@ -291,10 +265,19 @@ class StepResult:
     top: List[Tuple[str, float]]
     warnings: List[str] = field(default_factory=list)
     suggested_actions: List[str] = field(default_factory=list)
+    healthy_message: Optional[str] = None
 
 
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
+
+
+def tri_label(v: float) -> str:
+    if v <= 0:
+        return "No"
+    if v >= 100:
+        return "Sí"
+    return "Medio"
 
 
 def compute_tsat_and_sh(state: Dict[str, Any]) -> Tuple[Optional[float], Optional[float], List[str]]:
@@ -308,7 +291,6 @@ def compute_tsat_and_sh(state: Dict[str, Any]) -> Tuple[Optional[float], Optiona
         warnings.append("Falta presión de succión (PSI).")
         return None, None, warnings
 
-    # Ajuste por altitud (para tablas)
     alt_m = float(state.get("altitude_m") or 0.0)
     psig_for_table, w_alt = psig_local_to_sea_level_equiv(float(psig_local), alt_m)
     warnings += w_alt
@@ -339,7 +321,6 @@ def diagnose(state: Dict[str, Any], sim: ctrl.ControlSystemSimulation) -> Tuple[
     tsat, sh, w = compute_tsat_and_sh(state)
     warnings += w
 
-    # OJO: para el fuzzy usamos SUC también (psig equival nivel mar)
     suction_local = float(state.get("suction_psi") or 110.0)
     alt_m = float(state.get("altitude_m") or 0.0)
     suction_for_fuzzy, w_alt2 = psig_local_to_sea_level_equiv(suction_local, alt_m)
@@ -358,7 +339,7 @@ def diagnose(state: Dict[str, Any], sim: ctrl.ControlSystemSimulation) -> Tuple[
 
     tevap = float(state.get("temp_evap_c") or 6.0)
     tcond = float(state.get("temp_cond_c") or 45.0)
-    tamb  = float(state.get("temp_amb_ext_c") or 35.0)
+    tamb = float(state.get("temp_amb_ext_c") or 35.0)
 
     dtcond_ext_val = max(0.0, float(tcond) - float(tamb))
     if dtcond_ext_val > 50:
@@ -373,16 +354,14 @@ def diagnose(state: Dict[str, Any], sim: ctrl.ControlSystemSimulation) -> Tuple[
     la = float(sym.get("low_airflow", 50.0))
     ch = float(sym.get("comp_hot", 50.0))
     fr = float(sym.get("frost_restriction", 50.0))
-
-    # NUEVOS: OK (si/medio/no) -> 100/50/0
-    fco = float(sym.get("fan_cond_ok", 100.0))  # default "Sí"
-    feo = float(sym.get("fan_evap_ok", 100.0))  # default "Sí"
+    fco = float(sym.get("fan_cond_ok", 100.0))
+    feo = float(sym.get("fan_evap_ok", 100.0))
 
     sh_in = 10.0 if sh is None else float(sh)
 
     inputs = {
-        "SH": clamp(sh_in, 0, 30),                       # clamp para fuzzy
-        "SUC": clamp(suction_for_fuzzy, 20, 180),
+        "SH": clamp(sh_in, 0, 30),
+        "SUC": clamp(suction_for_fuzzy, -10, 180),
         "dT_air": clamp(dt_air, 0, 20),
         "pctRLA": clamp(pct_rla_val, 0, 160),
         "Tevap": clamp(tevap, -20, 30),
@@ -414,28 +393,35 @@ def diagnose(state: Dict[str, Any], sim: ctrl.ControlSystemSimulation) -> Tuple[
         "Ventilación exterior deficiente (ventilador/obstrucción/recirculación)": float(out.get("cond_fan_issue", 0.0)),
     }
 
-    top = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:3]
+    top_all = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    top = [item for item in top_all if item[1] > 0.0][:3]
     top_score = max(scores.values()) if scores else 0.0
 
-    # ---- TODO OK ----
-    ok_msg = None
+    healthy_message = None
+
     sh_ok = (sh is not None) and (4.0 <= sh <= 16.0)
     dt_ok = (8.0 <= dt_air <= 14.0)
     pct_ok = (60.0 <= pct_rla_val <= 100.0)
     tev_ok = (-2.0 <= tevap <= 14.0)
-    dtcond_ok = (10.0 <= dtcond_ext_val <= 26.0)
-    symptoms_ok = (lc <= 50 and ic <= 50 and dc <= 50 and la <= 50 and ch <= 50 and fr <= 50 and fco >= 50 and feo >= 50)
-    no_fault_detected = (top_score < 5.0)
+    dtcond_ok = (8.0 <= dtcond_ext_val <= 18.0)
+
+    symptoms_ok = (
+        lc == 0 and ic == 0 and dc == 0 and la == 0 and
+        ch == 0 and fr == 0 and fco == 100 and feo == 100
+    )
+
+    no_fault_detected = (top_score <= 0.0)
 
     if sh_ok and dt_ok and pct_ok and tev_ok and dtcond_ok and symptoms_ok and no_fault_detected:
-        ok_msg = "Equipo en niveles y condiciones óptimas para trabajar."
+        healthy_message = "El equipo se encuentra en buenas condiciones para trabajar."
 
     actions: List[str] = []
-    if ok_msg:
-        top = [(ok_msg, 100.0)]
+    if healthy_message:
+        top = [(healthy_message, 100.0)]
         actions += [
-            "Registrar lecturas como referencia (PSI, SH, ΔT aire, Amps, RLA, %RLA, T evap, T cond, Tamb_ext, ΔTcond_ext).",
-            "Mantener mantenimiento preventivo (filtros y serpentines limpios)."
+            "Registrar lecturas como referencia base del equipo.",
+            "Mantener filtros y serpentines limpios.",
+            "Continuar con mantenimiento preventivo periódico."
         ]
     else:
         if top:
@@ -450,39 +436,35 @@ def diagnose(state: Dict[str, Any], sim: ctrl.ControlSystemSimulation) -> Tuple[
                 elif "Exceso de refrigerante" in best_fault:
                     actions += [
                         "Confirmar refrigerante correcto y que la carga fue por peso (no por presión).",
-                        "Si se sospecha sobrecarga: recuperar y recargar POR PESO según placa.",
-                        "Verificar ventilación exterior: ventilador, recirculación de aire y obstrucciones."
+                        "Si se sospecha sobrecarga: recuperar y recargar por peso según placa.",
+                        "Verificar ventilación exterior: ventilador, recirculación y obstrucciones."
                     ]
                 elif "Restricción" in best_fault:
                     actions += [
-                        "Buscar escarcha localizada / caída de T en componente (filtro/capilar/TXV).",
-                        "Revisar TXV y posibles obstrucciones/humedad.",
+                        "Buscar escarcha localizada o caída de temperatura en filtro/capilar/TXV.",
+                        "Revisar TXV y posibles obstrucciones o humedad.",
                         "Cambiar filtro secador, evacuar y recargar si aplica."
                     ]
                 elif "Bajo flujo" in best_fault:
                     actions += [
-                        "Revisar turbina interior, capacitor (si aplica), filtros y serpentín evaporador.",
-                        "Confirmar ΔT aire tras corregir flujo."
+                        "Revisar turbina interior, capacitor, filtros y serpentín evaporador.",
+                        "Confirmar ΔT aire tras corregir el flujo."
                     ]
                 elif "Condensador sucio" in best_fault:
                     actions += [
-                        "Lavar condensador exterior (aletas/serpentín).",
+                        "Lavar condensador exterior.",
                         "Confirmar que ΔTcond_ext baje tras la limpieza."
                     ]
                 elif "Ventilación exterior deficiente" in best_fault:
                     actions += [
                         "Revisar ventilador del condensador (giro, capacitor, rpm, sentido).",
-                        "Revisar obstrucciones y recirculación de aire (unidad muy encerrada).",
+                        "Revisar obstrucciones y recirculación de aire.",
                         "Confirmar que ΔTcond_ext baje tras corregir ventilación."
                     ]
 
-    res = StepResult(tsat, sh, scores, top, warnings, actions)
+    res = StepResult(tsat, sh, scores, top, warnings, actions, healthy_message)
     return res, pct_rla_val, dtcond_ext_val, top_score
 
-
-# ============================================================
-# Chaquopy entrypoint: leer ClaseDatosPythonJava y escribir resultados
-# ============================================================
 
 ClaseDatosPythonJava = jclass("edu.mx.tecnm.hvac_pro2.ClaseDatosPythonJava")
 
@@ -497,45 +479,33 @@ def _get_sim():
 
 
 def run_diagnosis_from_java():
-    """
-    Lee variables desde ClaseDatosPythonJava (static fields),
-    ejecuta el diagnóstico, y escribe:
-      - ClaseDatosPythonJava.diagnostico
-      - ClaseDatosPythonJava.nivel_carga
-      - ClaseDatosPythonJava.tsat_evap_c
-      - ClaseDatosPythonJava.sh_c
-    """
     sim = _get_sim()
 
-    # ----- Entradas desde Java -----
     ref = (getattr(ClaseDatosPythonJava, "refrigerante", None) or "R410A").strip().upper()
 
-    suction_psi = float(getattr(ClaseDatosPythonJava, "presion_succion_psi", 0.0) or 0.0)
-    slt_c = float(getattr(ClaseDatosPythonJava, "temp_linea_succion_c", 0.0) or 0.0)
-    dt_air = float(getattr(ClaseDatosPythonJava, "deltaT_aire_interior_c", 0.0) or 0.0)
+    suction_psi = java_num(ClaseDatosPythonJava, "presion_succion_psi", 0.0)
+    slt_c = java_num(ClaseDatosPythonJava, "temp_linea_succion_c", 0.0)
+    dt_air = java_num(ClaseDatosPythonJava, "deltaT_aire_interior_c", 0.0)
 
-    amps = float(getattr(ClaseDatosPythonJava, "amperaje_compresor_a", 0.0) or 0.0)
-    rla = float(getattr(ClaseDatosPythonJava, "rla_compresor_a", 0.0) or 0.0)
+    amps = java_num(ClaseDatosPythonJava, "amperaje_compresor_a", 0.0)
+    rla = java_num(ClaseDatosPythonJava, "rla_compresor_a", 0.0)
 
-    tevap = float(getattr(ClaseDatosPythonJava, "temp_evaporador_c", 0.0) or 0.0)
-    tcond = float(getattr(ClaseDatosPythonJava, "temp_condensador_c", 0.0) or 0.0)
-    tamb = float(getattr(ClaseDatosPythonJava, "temp_ambiente_exterior_c", 0.0) or 0.0)
+    tevap = java_num(ClaseDatosPythonJava, "temp_evaporador_c", 0.0)
+    tcond = java_num(ClaseDatosPythonJava, "temp_condensador_c", 0.0)
+    tamb = java_num(ClaseDatosPythonJava, "temp_ambiente_exterior_c", 0.0)
 
-    # Ciudad / altitud
     ciudad = str(getattr(ClaseDatosPythonJava, "ciudad", "") or "")
-    alt_m = float(getattr(ClaseDatosPythonJava, "altitud_msnm", 0.0) or 0.0)
+    alt_m = java_num(ClaseDatosPythonJava, "altitud_msnm", 0.0)
 
-    # Síntomas (0/50/100)
-    lc = float(getattr(ClaseDatosPythonJava, "s_enfria_poco", 50) or 50)
-    ic = float(getattr(ClaseDatosPythonJava, "s_hielo_evaporador", 50) or 50)
-    la = float(getattr(ClaseDatosPythonJava, "s_flujo_aire_bajo", 50) or 50)
-    dc = float(getattr(ClaseDatosPythonJava, "s_condensador_sucio", 50) or 50)
-    ch = float(getattr(ClaseDatosPythonJava, "s_compresor_muy_caliente", 50) or 50)
-    fr = float(getattr(ClaseDatosPythonJava, "s_escarcha_localizada_restr", 50) or 50)
+    lc = java_num(ClaseDatosPythonJava, "s_enfria_poco", 50)
+    ic = java_num(ClaseDatosPythonJava, "s_hielo_evaporador", 50)
+    la = java_num(ClaseDatosPythonJava, "s_flujo_aire_bajo", 50)
+    dc = java_num(ClaseDatosPythonJava, "s_condensador_sucio", 50)
+    ch = java_num(ClaseDatosPythonJava, "s_compresor_muy_caliente", 50)
+    fr = java_num(ClaseDatosPythonJava, "s_escarcha_localizada_restr", 50)
 
-    # NUEVOS síntomas OK (0/50/100) - defaults 100
-    fco = float(getattr(ClaseDatosPythonJava, "s_fan_cond_ok", 100) or 100)
-    feo = float(getattr(ClaseDatosPythonJava, "s_fan_evap_ok", 100) or 100)
+    fco = java_num(ClaseDatosPythonJava, "s_fan_cond_ok", 100)
+    feo = java_num(ClaseDatosPythonJava, "s_fan_evap_ok", 100)
 
     state = {
         "refrigerant": ref,
@@ -562,15 +532,11 @@ def run_diagnosis_from_java():
 
     res, pct_rla_val, dtcond_ext_val, top_score = diagnose(state, sim)
 
-    # ----- Escribir resultados básicos a Java -----
     ClaseDatosPythonJava.tsat_evap_c = float(res.tsat_evap or 0.0)
     ClaseDatosPythonJava.sh_c = float(res.sh or 0.0)
 
-    # Determinar nivel_carga:
-    # 1 Óptimo, 2 Exceso, 3 Falta, 4 Indefinido
     lvl = 4
-
-    if res.top and res.top[0][0].startswith("Equipo en niveles"):
+    if res.healthy_message:
         lvl = 1
     else:
         best_name = res.top[0][0] if res.top else ""
@@ -579,12 +545,7 @@ def run_diagnosis_from_java():
                 lvl = 2
             elif "Baja carga" in best_name:
                 lvl = 3
-            else:
-                lvl = 4
-        else:
-            lvl = 4
 
-    # Armar texto completo para mostrar en Android
     lines = []
     lines.append("========== RESULTADOS ==========")
     lines.append(f"Ciudad: {ciudad}")
@@ -608,14 +569,14 @@ def run_diagnosis_from_java():
     lines.append(f"SH (°C): {('N/D' if res.sh is None else f'{res.sh:.1f}')}")
 
     lines.append("\nSíntomas (0/50/100):")
-    lines.append(f" - Enfría poco: {lc:.0f}")
-    lines.append(f" - Hielo evaporador: {ic:.0f}")
-    lines.append(f" - Flujo aire bajo: {la:.0f}")
-    lines.append(f" - Condensador sucio: {dc:.0f}")
-    lines.append(f" - Ventilador condensador OK: {fco:.0f}")
-    lines.append(f" - Turbina evaporador OK: {feo:.0f}")
-    lines.append(f" - Compresor muy caliente: {ch:.0f}")
-    lines.append(f" - Escarcha restricción: {fr:.0f}")
+    lines.append(f" - Enfría poco: {lc:.0f} ({tri_label(lc)})")
+    lines.append(f" - Hielo evaporador: {ic:.0f} ({tri_label(ic)})")
+    lines.append(f" - Flujo aire bajo: {la:.0f} ({tri_label(la)})")
+    lines.append(f" - Condensador sucio: {dc:.0f} ({tri_label(dc)})")
+    lines.append(f" - Ventilador condensador OK: {fco:.0f} ({tri_label(fco)})")
+    lines.append(f" - Turbina evaporador OK: {feo:.0f} ({tri_label(feo)})")
+    lines.append(f" - Compresor muy caliente: {ch:.0f} ({tri_label(ch)})")
+    lines.append(f" - Escarcha restricción: {fr:.0f} ({tri_label(fr)})")
 
     if res.warnings:
         lines.append("\nAdvertencias:")
@@ -623,8 +584,11 @@ def run_diagnosis_from_java():
             lines.append(f" - {w}")
 
     lines.append("\nTop diagnóstico:")
-    for name, sc in res.top:
-        lines.append(f" - {name}: {sc:.1f}%")
+    if res.top:
+        for name, sc in res.top:
+            lines.append(f" - {name}: {sc:.1f}%")
+    else:
+        lines.append(" - Sin diagnósticos con probabilidad mayor a 0%.")
 
     lines.append("\nScores:")
     for name, sc in sorted(res.scores.items(), key=lambda x: x[1], reverse=True):

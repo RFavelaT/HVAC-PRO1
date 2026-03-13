@@ -23,7 +23,6 @@ import java.util.Map;
 
 public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
 
-    // ===== Catálogo de ciudades y altitud =====
     private final Map<String, Integer> CIUDADES_ALT = new LinkedHashMap<String, Integer>() {{
         put("Chihuahua", 1415);
         put("Cd. Juárez", 1140);
@@ -40,9 +39,33 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         put("Mazatlán", 10);
     }};
 
-    // Helpers: SeekBar progress -> float
+    private static final int SUCTION_MIN_PSI = -10;
+    private static final int SUCTION_MAX_PSI = 180;
+
+    // Valores iniciales óptimos
+    private static final int SUCTION_DEFAULT_PSI = 115;
+    private static final float SLT_DEFAULT_C = 13.0f;
+    private static final float DT_AIR_DEFAULT_C = 10.0f;
+    private static final float AMPS_DEFAULT_A = 8.0f;
+    private static final float RLA_DEFAULT_A = 10.0f;
+    private static final float TEVAP_DEFAULT_C = 6.0f;
+    private static final float TCOND_DEFAULT_C = 45.0f;
+    private static final float TAMB_DEFAULT_C = 35.0f;
+
     private float progressToFloat(int progress, float min, float step) {
         return min + (progress * step);
+    }
+
+    private int floatToProgress(float value, float min, float step) {
+        return Math.round((value - min) / step);
+    }
+
+    private int progressToSuctionPsi(int progress) {
+        return SUCTION_MIN_PSI + progress;
+    }
+
+    private int suctionPsiToProgress(int psi) {
+        return psi - SUCTION_MIN_PSI;
     }
 
     private String fmt1(float x) {
@@ -72,13 +95,22 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         };
     }
 
-    // Convierte Spinner "No/Medio/Sí" -> 0/50/100
-    private int triToInt(String tri) {
-        if (tri == null) return 50;
-        tri = tri.trim();
-        if (tri.equalsIgnoreCase("No")) return 0;
-        if (tri.equalsIgnoreCase("Sí") || tri.equalsIgnoreCase("Si")) return 100;
-        return 50; // "Medio"
+    private int triToInt(Spinner spinner) {
+        int pos = spinner.getSelectedItemPosition();
+        if (pos == 0) return 0;
+        if (pos == 1) return 50;
+        if (pos == 2) return 100;
+        return 50;
+    }
+
+    private String triToLabel(int value) {
+        if (value <= 0) return "No";
+        if (value >= 100) return "Sí";
+        return "Medio";
+    }
+
+    private String triToDebugText(int value) {
+        return value + " (" + triToLabel(value) + ")";
     }
 
     @Override
@@ -86,13 +118,11 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_diagnostico_fuzzy_logic2);
 
-        // Revisar si Python está iniciado
         if (!Python.isStarted()) {
             Python.start(new AndroidPlatform(this));
         }
         final Python py = Python.getInstance();
 
-        // ===== Referencias UI =====
         Spinner spCity = findViewById(R.id.spCity);
         TextView tvAltitudeValue = findViewById(R.id.tvAltitudeValue);
 
@@ -102,11 +132,8 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         Spinner spIceEvap = findViewById(R.id.spIceEvap);
         Spinner spLowAirflow = findViewById(R.id.spLowAirflow);
         Spinner spDirtyCond = findViewById(R.id.spDirtyCond);
-
-        // ===== NUEVOS spinners =====
         Spinner spCondFanOk = findViewById(R.id.spCondFanOk);
         Spinner spEvapFanOk = findViewById(R.id.spEvapFanOk);
-
         Spinner spCompHot = findViewById(R.id.spCompHot);
         Spinner spFrostRestr = findViewById(R.id.spFrostRestr);
 
@@ -137,11 +164,7 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         Button btn = findViewById(R.id.btnDiagnose);
         TextView tvResults = findViewById(R.id.tvResults);
 
-        // =====================================================
-        // Spinner de ciudad + altitud
-        // =====================================================
         String[] ciudades = CIUDADES_ALT.keySet().toArray(new String[0]);
-
         ArrayAdapter<String> cityAdapter = new ArrayAdapter<>(
                 this,
                 android.R.layout.simple_spinner_item,
@@ -150,7 +173,6 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
         cityAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spCity.setAdapter(cityAdapter);
 
-        // Selección por defecto: Chihuahua
         int defaultCityIndex = 0;
         spCity.setSelection(defaultCityIndex);
 
@@ -166,9 +188,7 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 String ciudad = ciudades[position];
                 int altitud = CIUDADES_ALT.get(ciudad);
-
                 tvAltitudeValue.setText("Altitud: " + altitud + " msnm");
-
                 ClaseDatosPythonJava.ciudad = ciudad;
                 ClaseDatosPythonJava.altitud_msnm = (float) altitud;
             }
@@ -177,9 +197,6 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
             public void onNothingSelected(AdapterView<?> parent) { }
         });
 
-        // =====================================================
-        // Refrigerante
-        // =====================================================
         List<String> refs = Arrays.asList("R410A", "R22", "R32");
         ArrayAdapter<String> refAdapter = new ArrayAdapter<>(
                 this,
@@ -187,10 +204,8 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
                 refs
         );
         spRef.setAdapter(refAdapter);
+        spRef.setSelection(0);
 
-        // =====================================================
-        // Spinner tri-state (No/Medio/Sí)
-        // =====================================================
         List<String> triValues = Arrays.asList("No", "Medio", "Sí");
         ArrayAdapter<String> triAdapter = new ArrayAdapter<>(
                 this,
@@ -201,95 +216,92 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
 
         Spinner[] triSpinners = new Spinner[] {
                 spLowCooling, spIceEvap, spLowAirflow, spDirtyCond,
-                spCondFanOk, spEvapFanOk, // <<<<<< NUEVOS
-                spCompHot, spFrostRestr
+                spCondFanOk, spEvapFanOk, spCompHot, spFrostRestr
         };
+
         for (Spinner s : triSpinners) {
             s.setAdapter(triAdapter);
-            s.setSelection(0); // default "No"
         }
-        spLowCooling.setSelection(1); // default "Medio"
 
-        // (opcional) defaults para nuevos síntomas:
-        // Si quieres que por defecto se asuma que sí funcionan:
-        spCondFanOk.setSelection(2);  // "Sí"
-        spEvapFanOk.setSelection(2);  // "Sí"
+        // Síntomas óptimos al iniciar
+        spLowCooling.setSelection(0); // No
+        spIceEvap.setSelection(0);    // No
+        spLowAirflow.setSelection(0); // No
+        spDirtyCond.setSelection(0);  // No
+        spCondFanOk.setSelection(2);  // Sí
+        spEvapFanOk.setSelection(2);  // Sí
+        spCompHot.setSelection(0);    // No
+        spFrostRestr.setSelection(0); // No
 
-        // =====================================================
-        // SeekBars + TextViews
-        // =====================================================
-        sbSuction.setProgress(95); // 115
-        tvSuction.setText("115");
+        sbSuction.setMax(SUCTION_MAX_PSI - SUCTION_MIN_PSI);
+        sbSuction.setProgress(suctionPsiToProgress(SUCTION_DEFAULT_PSI));
+        tvSuction.setText(String.valueOf(SUCTION_DEFAULT_PSI));
         sbSuction.setOnSeekBarChangeListener(simpleListener(progress -> {
-            int v = 20 + progress;
+            int v = progressToSuctionPsi(progress);
             tvSuction.setText(String.valueOf(v));
         }));
 
-        sbSlt.setProgress(270); // 22.0
-        tvSlt.setText("22.0");
+        sbSlt.setProgress(floatToProgress(SLT_DEFAULT_C, -5f, 0.1f));
+        tvSlt.setText(fmt1(SLT_DEFAULT_C));
         sbSlt.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, -5f, 0.1f);
-            tvSlt.setText(fmt1(v));
+            float val = progressToFloat(progress, -5f, 0.1f);
+            tvSlt.setText(fmt1(val));
         }));
 
-        sbDt.setProgress(100); // 10.0
-        tvDt.setText("10.0");
+        sbDt.setProgress(floatToProgress(DT_AIR_DEFAULT_C, 0f, 0.1f));
+        tvDt.setText(fmt1(DT_AIR_DEFAULT_C));
         sbDt.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, 0f, 0.1f);
-            tvDt.setText(fmt1(v));
+            float val = progressToFloat(progress, 0f, 0.1f);
+            tvDt.setText(fmt1(val));
         }));
 
-        sbAmps.setProgress(80); // 8.0
-        tvAmps.setText("8.0");
+        sbAmps.setProgress(floatToProgress(AMPS_DEFAULT_A, 0f, 0.1f));
+        tvAmps.setText(fmt1(AMPS_DEFAULT_A));
         sbAmps.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, 0f, 0.1f);
-            tvAmps.setText(fmt1(v));
+            float val = progressToFloat(progress, 0f, 0.1f);
+            tvAmps.setText(fmt1(val));
         }));
 
-        sbRla.setProgress(90); // 10.0
-        tvRla.setText("10.0");
+        sbRla.setProgress(floatToProgress(RLA_DEFAULT_A, 1f, 0.1f));
+        tvRla.setText(fmt1(RLA_DEFAULT_A));
         sbRla.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, 1f, 0.1f);
-            tvRla.setText(fmt1(v));
+            float val = progressToFloat(progress, 1f, 0.1f);
+            tvRla.setText(fmt1(val));
         }));
 
-        sbTevap.setProgress(260); // 6.0
-        tvTevap.setText("6.0");
+        sbTevap.setProgress(floatToProgress(TEVAP_DEFAULT_C, -20f, 0.1f));
+        tvTevap.setText(fmt1(TEVAP_DEFAULT_C));
         sbTevap.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, -20f, 0.1f);
-            tvTevap.setText(fmt1(v));
+            float val = progressToFloat(progress, -20f, 0.1f);
+            tvTevap.setText(fmt1(val));
         }));
 
-        sbTcond.setProgress(250); // 45.0
-        tvTcond.setText("45.0");
+        sbTcond.setProgress(floatToProgress(TCOND_DEFAULT_C, 20f, 0.1f));
+        tvTcond.setText(fmt1(TCOND_DEFAULT_C));
         sbTcond.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, 20f, 0.1f);
-            tvTcond.setText(fmt1(v));
+            float val = progressToFloat(progress, 20f, 0.1f);
+            tvTcond.setText(fmt1(val));
         }));
 
-        sbTamb.setProgress(350); // 35.0
-        tvTamb.setText("35.0");
+        sbTamb.setProgress(floatToProgress(TAMB_DEFAULT_C, 0f, 0.1f));
+        tvTamb.setText(fmt1(TAMB_DEFAULT_C));
         sbTamb.setOnSeekBarChangeListener(simpleListener(progress -> {
-            float v = progressToFloat(progress, 0f, 0.1f);
-            tvTamb.setText(fmt1(v));
+            float val = progressToFloat(progress, 0f, 0.1f);
+            tvTamb.setText(fmt1(val));
         }));
 
-        // =====================================================
-        // Botón Diagnosticar
-        // =====================================================
         btn.setOnClickListener(v -> {
             String ref = spRef.getSelectedItem().toString();
 
             String ciudadSel = spCity.getSelectedItem().toString();
             int altitudSel = CIUDADES_ALT.get(ciudadSel);
 
-            float suctionPsi = (20 + sbSuction.getProgress());
+            float suctionPsi = (float) progressToSuctionPsi(sbSuction.getProgress());
             float sltVal = progressToFloat(sbSlt.getProgress(), -5f, 0.1f);
             float dTairVal = progressToFloat(sbDt.getProgress(), 0f, 0.1f);
 
             float ampsVal = progressToFloat(sbAmps.getProgress(), 0f, 0.1f);
             float rlaVal = progressToFloat(sbRla.getProgress(), 1f, 0.1f);
-
             float pctRlaVal = (rlaVal > 0f) ? (ampsVal / rlaVal) * 100f : 0f;
 
             float tevVal = progressToFloat(sbTevap.getProgress(), -20f, 0.1f);
@@ -299,19 +311,15 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
             float dtCondExtVal = tcondVal - tambVal;
             if (dtCondExtVal < 0f) dtCondExtVal = 0f;
 
-            // Síntomas tri-state -> 0/50/100
-            int sLowCooling = triToInt(spLowCooling.getSelectedItem().toString());
-            int sIceEvapVal = triToInt(spIceEvap.getSelectedItem().toString());
-            int sLowAirflowVal = triToInt(spLowAirflow.getSelectedItem().toString());
-            int sDirtyCondVal = triToInt(spDirtyCond.getSelectedItem().toString());
-            int sCompHotVal = triToInt(spCompHot.getSelectedItem().toString());
-            int sFrostRestrVal = triToInt(spFrostRestr.getSelectedItem().toString());
+            int sLowCooling = triToInt(spLowCooling);
+            int sIceEvapVal = triToInt(spIceEvap);
+            int sLowAirflowVal = triToInt(spLowAirflow);
+            int sDirtyCondVal = triToInt(spDirtyCond);
+            int sCompHotVal = triToInt(spCompHot);
+            int sFrostRestrVal = triToInt(spFrostRestr);
+            int sCondFanOkVal = triToInt(spCondFanOk);
+            int sEvapFanOkVal = triToInt(spEvapFanOk);
 
-            // ===== NUEVOS SÍNTOMAS =====
-            int sCondFanOkVal = triToInt(spCondFanOk.getSelectedItem().toString());
-            int sEvapFanOkVal = triToInt(spEvapFanOk.getSelectedItem().toString());
-
-            // --------- ASIGNAR A ClaseDatosPythonJava ----------
             ClaseDatosPythonJava.refrigerante = ref;
             ClaseDatosPythonJava.presionLbaja = fmt0(suctionPsi);
             ClaseDatosPythonJava.tempLbaja = fmt1(sltVal);
@@ -339,12 +347,9 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
             ClaseDatosPythonJava.s_condensador_sucio = sDirtyCondVal;
             ClaseDatosPythonJava.s_compresor_muy_caliente = sCompHotVal;
             ClaseDatosPythonJava.s_escarcha_localizada_restr = sFrostRestrVal;
-
-            // ===== NUEVOS CAMPOS (Paso 3 los agregamos a la clase) =====
             ClaseDatosPythonJava.s_fan_cond_ok = sCondFanOkVal;
             ClaseDatosPythonJava.s_fan_evap_ok = sEvapFanOkVal;
 
-            // Limpiar salida previa
             ClaseDatosPythonJava.diagnostico = "";
             ClaseDatosPythonJava.tsat_evap_c = 0f;
             ClaseDatosPythonJava.sh_c = 0f;
@@ -366,14 +371,14 @@ public class DiagnosticoFuzzyLogic2 extends AppCompatActivity {
                             "Tamb ext (°C): " + fmt1(tambVal) + "\n" +
                             "ΔTcond_ext (°C): " + fmt1(dtCondExtVal) + "\n\n" +
                             "Síntomas (0/50/100):\n" +
-                            "- Enfría poco: " + sLowCooling + "\n" +
-                            "- Hielo evap: " + sIceEvapVal + "\n" +
-                            "- Bajo flujo: " + sLowAirflowVal + "\n" +
-                            "- Cond sucio: " + sDirtyCondVal + "\n" +
-                            "- Vent cond OK: " + sCondFanOkVal + "\n" +
-                            "- Turb evap OK: " + sEvapFanOkVal + "\n" +
-                            "- Comp caliente: " + sCompHotVal + "\n" +
-                            "- Escarcha restr: " + sFrostRestrVal + "\n\n" +
+                            "- Enfría poco: " + triToDebugText(sLowCooling) + "\n" +
+                            "- Hielo evap: " + triToDebugText(sIceEvapVal) + "\n" +
+                            "- Bajo flujo: " + triToDebugText(sLowAirflowVal) + "\n" +
+                            "- Cond sucio: " + triToDebugText(sDirtyCondVal) + "\n" +
+                            "- Vent cond OK: " + triToDebugText(sCondFanOkVal) + "\n" +
+                            "- Turb evap OK: " + triToDebugText(sEvapFanOkVal) + "\n" +
+                            "- Comp caliente: " + triToDebugText(sCompHotVal) + "\n" +
+                            "- Escarcha restr: " + triToDebugText(sFrostRestrVal) + "\n\n" +
                             "Ejecutando diagnóstico...\n";
 
             tvResults.setText(report);

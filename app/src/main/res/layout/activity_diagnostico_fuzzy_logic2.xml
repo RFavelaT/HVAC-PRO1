@@ -94,7 +94,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Presión de succión (PSI):"
+                android:text="Presión de succión / vacío (-10 a 180 PSI):"
                 android:paddingTop="12dp" />
 
             <LinearLayout
@@ -108,7 +108,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="160" />
+                    android:max="190" />
 
                 <TextView
                     android:id="@+id/tvSuctionPsiValue"
